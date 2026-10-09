@@ -1,0 +1,63 @@
+test_num,input_prompt
+1,"class LinkedList:
+    def __init__(self,"
+2,"def __init__(self, a, b, c)
+    self.a = "
+3,"print(f""value of 2 + 3 = {"
+4,"integers = [(i+1) of i in range("
+5,"def reverseList(list):
+    """""""
+6,"if __name__ == "
+7,"while (True):"
+8,"class BinaryTree:
+    """"""
+    "
+9,"def print_num(number):
+    """"""
+    Args:
+        value: the value printed
+    """"""
+    print("
+10,"def addNums(a, b):
+    """"""
+    returns the value of a + b
+    """""""
+11,"def addNums(b, a):
+    """"""
+    returns the value of b + a
+    """""""
+12,"class person:
+    def __init(self, "
+13,"def highEnough(val):
+    if val > self.min:
+        "
+14,"def getMax(a, b):
+    """"""
+    returns the greater value between a and b:
+    return a if a > b else b
+    """"""
+    return a"
+15,"class listManager:
+    def __init__(self):
+        self.list = []
+    
+    def getMinimum(self):
+        return "
+16,"import os
+""creating directory /home/testing.txt""
+os.makedirs("
+17,"""""""
+Testing file for the LinkedList class, includes test for:
+1. attempting to remove from empty list,
+2. inserting an item
+"""""""
+18,"class Class:
+    def __init__(self):
+        self.a = 2
+    
+    #initializer:
+    def "
+19,"print(""Hello "
+20,"while True:
+    print(""input -1 to stop"")
+    x = input(""what is your input"")"
