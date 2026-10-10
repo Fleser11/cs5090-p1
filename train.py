@@ -1,5 +1,11 @@
-#This is a stripped out version of the training file for nanoGPT based on Project 1 specification. 
+#This is a stripped out version of the training file for nanoGPT based on Project 1 specification.
 #Nano gpt can be found here https://github.com/karpathy/nanoGPT/blob/master/data/shakespeare/prepare.py
+
+# Resumable (e.g. across Kaggle sessions): out_dir/latest.pt (model, optimizer, scaler, iteration, data position)
+# is saved every save_interval iterations and when max_hours is reached. Rerunning the same command picks it up,
+# or pass --resume_from <path to a latest.pt from an earlier session>. The data position is a fixed-seed shuffle
+# plus the number of rows consumed, so a resumed run skips what it already trained on (and starts a new pass
+# with a new shuffle if the dataset is ever exhausted).
 
 
 import argparse
@@ -7,10 +13,8 @@ import importlib
 import os
 import time
 import math
-from contextlib import nullcontext
 from tokenizers import Tokenizer
 import torch
-from torch.nn.parallel import DistributedDataParallel as DDP
 from datasets import load_dataset
 from model import GPTConfig, GPT
 from dataclasses import asdict
@@ -18,7 +22,7 @@ import csv
 
 
 
-def main( 
+def main(
     out_dir,
     log_dir: str,
     eval_iters,
@@ -41,132 +45,144 @@ def main(
     min_lr,
     vocab_size,
     dataset_name,
-    tokenizer_path
+    tokenizer_path,
+    rope=False, # rotary position encodings instead of learned absolute position embeddings
+    resume_from="", # latest.pt from an earlier session (out_dir/latest.pt is tried first)
+    save_interval=500, # iterations between resumable checkpoints
+    max_hours=1e9, # stop and save after this many hours (Kaggle sessions end at 12h)
+    dtype='auto', # 'auto' = bfloat16 on Ampere+, float16 (with GradScaler) on T4/P100
+    compile=True, # switched off automatically on GPUs older than sm70 (P100)
+    seed=1337,
     ):
 
+    start_time = time.time()
     # -----------------------------------------------------------------------------
-    # DDP settings
-    backend = 'nccl' # 'nccl', 'gloo', etc.
-    # system
     device = 'cuda' # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1' etc., or try 'mps' on macbooks
-    dtype = 'bfloat16' if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else 'float16' # 'float32', 'bfloat16', or 'float16', the latter will auto implement a GradScaler
-    compile = True # use PyTorch 2.0 to compile the model to be faster
+    major = torch.cuda.get_device_capability()[0]
+    if dtype == 'auto':
+        dtype = 'bfloat16' if major >= 8 else 'float16' # T4/P100 have no real bf16
+    compile = compile and major >= 7 # torch.compile needs Triton, which needs sm70+ (not P100)
     # -----------------------------------------------------------------------------
 
-    
-    # if not ddp, we are running on a single gpu, and one process
-    master_process = True
-    seed_offset = 0
-    ddp_world_size = 1
-    tokens_per_iter = gradient_accumulation_steps * ddp_world_size * batch_size * block_size
-    print(f"tokens per iteration will be: {tokens_per_iter:,}")
+    tokens_per_iter = gradient_accumulation_steps * batch_size * block_size
+    print(f"tokens per iteration will be: {tokens_per_iter:,} | dtype {dtype} | compile {compile}")
 
-    if master_process:
-        os.makedirs(out_dir, exist_ok=True)
-    torch.manual_seed(1337 + seed_offset)
+    os.makedirs(out_dir, exist_ok=True)
+    torch.manual_seed(seed)
     torch.backends.cuda.matmul.allow_tf32 = True # allow tf32 on matmul
     torch.backends.cudnn.allow_tf32 = True # allow tf32 on cudnn
-    device_type = 'cuda' if 'cuda' in device else 'cpu' # for later use in torch.autocast
     # note: float16 data type will automatically use a GradScaler
     ptdtype = {'float32': torch.float32, 'bfloat16': torch.bfloat16, 'float16': torch.float16}[dtype]
-    ctx = nullcontext() if device_type == 'cpu' else torch.amp.autocast(device_type=device_type, dtype=ptdtype)
+    ctx = torch.amp.autocast(device_type='cuda', dtype=ptdtype)
 
-    def get_datasets(dataset_name, tokenizer_path):
-        tokenizer = Tokenizer.from_file(tokenizer_path)
-        ds_train = load_dataset(dataset_name, split="train", streaming=True)
-        # print(next(iter(ds_train)))
-        ds_train_tokenized = ds_train.map(
-            lambda row: {"tokens": tokenizer.encode(row["content"]+"<stop>").ids},
-        )
-        ds_train_shuffled = ds_train_tokenized.shuffle(buffer_size = 1000)
-        ds_train_iter = iter(ds_train_shuffled)
+    # resume: out_dir/latest.pt wins over resume_from (so a restarted session keeps its own progress)
+    model_args = dict(n_layer=n_layer, n_head=n_head,
+                      n_embd=n_embed, block_size=block_size,
+                      bias=False, vocab_size=vocab_size, rope=rope) # start with model_args from command line
+    latest_path = os.path.join(out_dir, 'latest.pt')
+    resume_path = next((p for p in (latest_path, resume_from) if p and os.path.exists(p)), None)
+    iter_num, best_val_loss, data_state, checkpoint = 0, 1e9, dict(epoch=0, rows=0), None
+    if resume_path:
+        checkpoint = torch.load(resume_path, map_location='cpu', weights_only=True)
+        assert checkpoint['model_args'] == model_args, f"config does not match {resume_path}: {checkpoint['model_args']}"
+        iter_num, best_val_loss, data_state = checkpoint['iter_num'], checkpoint['best_val_loss'], checkpoint['data_state']
+        print(f"resuming from {resume_path} at iteration {iter_num} (pass {data_state['epoch']}, {data_state['rows']} rows in)")
 
-        ds_val = load_dataset("codeparrot/codeparrot-clean-valid", split="train", streaming=True)
-        ds_val_tokenized = ds_val.map(
-            lambda row: {"tokens": tokenizer.encode(row["content"]+"<stop>").ids},
-        )
-        ds_val_shuffled = ds_val_tokenized.shuffle(buffer_size = 500)
-        ds_val_iter = iter(ds_val_shuffled)
+    tokenizer = Tokenizer.from_file(tokenizer_path)
+    assert tokenizer.get_vocab_size() <= vocab_size, "tokenizer is larger than the model's vocab_size"
 
-        return ds_train_iter, ds_val_iter
+    def make_iter(name, buffer_size, shuffle_seed, skip):
+        # shuffle with a fixed seed, then skip rows already used, then tokenize (so skipped rows cost nothing)
+        ds = load_dataset(name, split="train", streaming=True).shuffle(seed=shuffle_seed, buffer_size=buffer_size).skip(skip)
+        return iter(ds.map(lambda row: {"tokens": tokenizer.encode(row["content"]+"<stop>").ids}))
 
-
-    ds_train_iter, ds_val_iter = get_datasets(dataset_name, tokenizer_path)
-
-    train_buffer = []
-    val_buffer = []
+    iterators = {
+        'train': make_iter(dataset_name, 1000, seed + data_state['epoch'], data_state['rows']),
+        'val': make_iter("codeparrot/codeparrot-clean-valid", 500, seed, 0),
+    }
+    buffers = {'train': [], 'val': []}
 
     def get_batch(split):
 
-        if split == 'train':
-            buffer = train_buffer
-            iterator = ds_train_iter
-        else:
-            buffer = val_buffer
-            iterator = ds_val_iter
-
+        buffer = buffers[split]
         while len(buffer) < block_size * batch_size + 1:
-            # print(f"Type: {type(sample)}, value: {sample}")
-            buffer.extend(next(iterator)["tokens"])
+            try:
+                row = next(iterators[split])
+            except StopIteration: # ran out of data: start another pass with a different shuffle
+                if split == 'train':
+                    data_state['epoch'] += 1
+                    data_state['rows'] = 0
+                    print(f"dataset exhausted, starting pass {data_state['epoch']}")
+                    iterators['train'] = make_iter(dataset_name, 1000, seed + data_state['epoch'], 0)
+                else:
+                    iterators['val'] = make_iter("codeparrot/codeparrot-clean-valid", 500, seed, 0)
+                row = next(iterators[split])
+            if split == 'train':
+                data_state['rows'] += 1
+            buffer.extend(row["tokens"])
 
-        # ix = torch.randint(len(data) - block_size, (batch_size,))
         data = torch.tensor(buffer[:block_size*batch_size + 1], dtype=torch.int64)
         x = data[:block_size*batch_size].view(batch_size, block_size)
         y = data[1:block_size*batch_size + 1].view(batch_size, block_size)
 
         del buffer[:block_size*batch_size]
 
-        if device_type == 'cuda':
-            # pin arrays x,y, which allows us to move them to GPU asynchronously (non_blocking=True)
-            x, y = x.pin_memory().to(device, non_blocking=True), y.pin_memory().to(device, non_blocking=True)
-        else:
-            x, y = x.to(device), y.to(device)
-
-        return x, y
-
-    iter_num = 0
-    best_val_loss = 1e9
+        # pin arrays x,y, which allows us to move them to GPU asynchronously (non_blocking=True)
+        return x.pin_memory().to(device, non_blocking=True), y.pin_memory().to(device, non_blocking=True)
 
     # model init
-    model_args = dict(n_layer=n_layer, n_head=n_head, 
-                      n_embd=n_embed, block_size=block_size,
-                      bias=False, vocab_size=vocab_size) # start with model_args from command line
-    # init a new model from scratch
-    print("Initializing a new model from scratch")
+    print("Initializing a new model from scratch" if checkpoint is None else "Initializing model from checkpoint")
     print(f"Model args: {model_args}")
     gptconf = GPTConfig(**model_args)
     model = GPT(gptconf)
-    # crop down the model block size if desired, using model surgery
+    if checkpoint:
+        model.load_state_dict({k.removeprefix('_orig_mod.'): v for k, v in checkpoint['model'].items()})
     model.to(device)
 
     # initialize a GradScaler. If enabled=False scaler is a no-op
-    scaler = torch.cuda.amp.GradScaler(enabled=(dtype == 'float16'))
+    scaler = torch.amp.GradScaler('cuda', enabled=(dtype == 'float16'))
 
     # optimizer
-    optimizer = model.configure_optimizers(weight_decay, learning_rate, (beta1, beta2), device_type)
+    optimizer = model.configure_optimizers(weight_decay, learning_rate, (beta1, beta2), 'cuda')
+    if checkpoint:
+        optimizer.load_state_dict(checkpoint['optimizer'])
+        scaler.load_state_dict(checkpoint['scaler'])
     checkpoint = None # free up memory
 
     # compile the model
+    raw_model = model # the uncompiled module, so saved state dicts have plain key names
     if compile:
         print("compiling the model... (takes a ~minute)")
         model = torch.compile(model) # requires PyTorch 2.0
 
+    def save_latest():
+        # write to a temp file first so a crash mid-save cannot corrupt the previous checkpoint
+        torch.save({
+            'model': raw_model.state_dict(),
+            'optimizer': optimizer.state_dict(),
+            'scaler': scaler.state_dict(),
+            'model_args': model_args,
+            'iter_num': iter_num,
+            'best_val_loss': best_val_loss,
+            'data_state': dict(data_state),
+        }, latest_path + '.tmp')
+        os.replace(latest_path + '.tmp', latest_path)
+        print(f"saved resumable checkpoint at iteration {iter_num}")
 
-    # helps estimate an arbitrarily accurate loss over either split using many batches
+    # estimates the validation loss on a fixed set of batches (drawn once, then reused)
+    val_batches = []
     @torch.no_grad()
-    def estimate_loss():
-        out = {}
+    def estimate_val_loss():
+        if not val_batches:
+            val_batches.extend(get_batch('val') for _ in range(eval_iters))
         model.eval()
-        for split in ['train', 'val']:
-            losses = torch.zeros(eval_iters)
-            for k in range(eval_iters):
-                X, Y = get_batch(split)
-                with ctx:
-                    logits, loss = model(X, Y)
-                losses[k] = loss.item()
-            out[split] = losses.mean()
+        losses = torch.zeros(eval_iters)
+        for k, (X, Y) in enumerate(val_batches):
+            with ctx:
+                logits, loss = model(X, Y)
+            losses[k] = loss.item()
         model.train()
-        return out
+        return losses.mean().item()
 
     # learning rate decay scheduler (cosine with warmup)
     def get_lr(it):
@@ -177,28 +193,23 @@ def main(
         elif it > lr_decay_iters:
             return min_lr
         # 3) in between, use cosine decay down to min learning rate
-        elif lr_decay_iters != None:
-            decay_ratio = (it - warmup_iters) / (lr_decay_iters - warmup_iters)
-            assert 0 <= decay_ratio <= 1
-            coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio)) # coeff ranges 0..1
-            return min_lr + coeff * (learning_rate - min_lr)
-        else:
-            return learning_rate
+        decay_ratio = (it - warmup_iters) / (lr_decay_iters - warmup_iters)
+        assert 0 <= decay_ratio <= 1
+        coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio)) # coeff ranges 0..1
+        return min_lr + coeff * (learning_rate - min_lr)
 
 
     # training loop
     X, Y = get_batch('train') # fetch the very first batch
     t0 = time.time()
-    local_iter_num = 0 # number of iterations in the lifetime of this process
-    raw_model =  model # unwrap DDP container if needed
-    running_mfu = -1.0
 
-    os.makedirs("/".join(log_dir.split("/")[:-1]), exist_ok=True)
-    f = open(log_dir, "w")
+    os.makedirs(os.path.dirname(log_dir) or ".", exist_ok=True)
+    new_log = not (resume_path and os.path.exists(log_dir))
+    f = open(log_dir, "w" if new_log else "a")
     csv_log_writer = csv.writer(f)
-
-    headers = ["iteration", "train_loss", "val_loss"]
-    csv_log_writer.writerow(headers)
+    if new_log:
+        headers = ["iteration", "train_loss", "val_loss"]
+        csv_log_writer.writerow(headers)
 
     #setting up logging
     while True:
@@ -207,7 +218,7 @@ def main(
         val_loss = ""
 
         # determine and set the learning rate for this iteration
-        lr = get_lr(iter_num) if (lr_decay_iters != None or warmup_iters != None) else learning_rate
+        lr = get_lr(iter_num)
         for param_group in optimizer.param_groups:
             param_group['lr'] = lr
 
@@ -236,49 +247,48 @@ def main(
         t1 = time.time()
         dt = t1 - t0
         t0 = t1
-        if iter_num % log_interval == 0 and master_process:
+        if iter_num % log_interval == 0:
             # get loss as float. note: this is a CPU-GPU sync point
             # scale up to undo the division above, approximating the true total loss (exact would have been a sum)
             lossf = loss.item() * gradient_accumulation_steps
-            if local_iter_num >= 5: # let the training loop settle a bit
-                mfu = raw_model.estimate_mfu(batch_size * gradient_accumulation_steps, dt)
-                running_mfu = mfu if running_mfu == -1.0 else 0.9*running_mfu + 0.1*mfu
-            print(f"iter {iter_num}: loss {lossf:.4f}, time {dt*1000:.2f}ms, mfu {running_mfu*100:.2f}%")
+            print(f"iter {iter_num}: loss {lossf:.4f}, time {dt*1000:.0f}ms, {tokens_per_iter/dt:,.0f} tokens/s")
             train_loss = lossf
 
-        
-        # evaluate the loss on train/val sets and write checkpoints
-        if iter_num % eval_interval == 0 and master_process:
-            losses = estimate_loss()
-            print(f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
 
-            if losses['val'] < best_val_loss:
-                best_val_loss = losses['val']
+        # evaluate the loss on the validation set and write checkpoints
+        if iter_num % eval_interval == 0:
+            val_loss = estimate_val_loss()
+            print(f"step {iter_num}: val loss {val_loss:.4f}")
+
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
                 if iter_num > 0:
                     checkpoint = {
                         'model': raw_model.state_dict(),
-                        'optimizer': optimizer.state_dict(),
                         'model_args': model_args,
                         'iter_num': iter_num,
                         'best_val_loss': best_val_loss,
                     }
                     print(f"saving checkpoint to {out_dir}")
-                    torch.save(checkpoint, os.path.join(out_dir, 'ckpt.pt'))
-
-            train_loss = losses["train"].item()
-            val_loss = losses["val"].item()
-
-        f.flush()
+                    torch.save(checkpoint, os.path.join(out_dir, 'ckpt.pt')) # the best model, as gen_pipe.py and sft.py load
+                    checkpoint = None
 
         if iter_num % log_interval == 0:
             csv_log_writer.writerow([iter_num, train_loss, val_loss])
-            
+            f.flush()
+
 
         iter_num += 1
-        local_iter_num += 1
+
+        # periodic resumable checkpoint
+        if iter_num % save_interval == 0:
+            save_latest()
 
         # termination conditions
-        if iter_num > max_iters:
+        out_of_time = time.time() - start_time > max_hours * 3600
+        if iter_num > max_iters or out_of_time:
+            save_latest()
+            print("time budget reached, rerun to resume" if out_of_time and iter_num <= max_iters else "done")
             break
 
 
@@ -287,9 +297,15 @@ if __name__ == "__main__":
     argument_parser.add_argument(
         "-c", "--config", required=True
     )
+    argument_parser.add_argument(
+        "--resume_from", default=None, help="latest.pt from an earlier session (overrides the config)"
+    )
     args = argument_parser.parse_args()
     # accept either a module name (configs.base_config) or a path (configs/base_config.py)
-    config_name = args.config.replace("/", ".")
+    config_name = args.config.removesuffix(".py").replace("/", ".")
     module = importlib.import_module(config_name)
 
-    main(**asdict(module.TrainingConfig()))
+    config = asdict(module.TrainingConfig())
+    if args.resume_from:
+        config["resume_from"] = args.resume_from
+    main(**config)
