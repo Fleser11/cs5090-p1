@@ -32,3 +32,4 @@ class TrainingConfig:
     dtype: str = 'auto'  # 'auto' = bfloat16 on Ampere+, float16 (with GradScaler) on T4/P100
     compile: bool = True  # switched off automatically on GPUs older than sm70 (P100)
     seed: int = 1337
+    device: str = 'auto'  # 'auto' = CUDA GPU if present, else TPU (needs torch_xla); or 'cuda' / 'tpu'

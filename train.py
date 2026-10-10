@@ -6,9 +6,15 @@
 # or pass --resume_from <path to a latest.pt from an earlier session>. The data position is a fixed-seed shuffle
 # plus the number of rows consumed, so a resumed run skips what it already trained on (and starts a new pass
 # with a new shuffle if the dataset is ever exhausted).
+#
+# Runs on one CUDA GPU or on a TPU (config device='auto' picks CUDA if present, else TPU via torch_xla).
+# On a TPU every core runs this function: each core streams its own slice of the data, gradients are averaged
+# across cores before the optimizer step, and gradient_accumulation_steps is divided by the number of cores
+# so the tokens per iteration stay the same as on a single GPU.
 
 
 import argparse
+import builtins
 import importlib
 import os
 import time
@@ -16,10 +22,22 @@ import math
 from tokenizers import Tokenizer
 import torch
 from datasets import load_dataset
+from datasets.distributed import split_dataset_by_node
 from model import GPTConfig, GPT
 from dataclasses import asdict
 import csv
 
+
+def pick_device(device):
+    if device != 'auto':
+        return device
+    if torch.cuda.is_available():
+        return 'cuda'
+    try:
+        import torch_xla # noqa: F401
+        return 'tpu'
+    except ImportError:
+        raise RuntimeError("no CUDA GPU or torch_xla (TPU) found")
 
 
 def main(
@@ -49,23 +67,45 @@ def main(
     rope=False, # rotary position encodings instead of learned absolute position embeddings
     resume_from="", # latest.pt from an earlier session (out_dir/latest.pt is tried first)
     save_interval=500, # iterations between resumable checkpoints
-    max_hours=1e9, # stop and save after this many hours (Kaggle sessions end at 12h)
-    dtype='auto', # 'auto' = bfloat16 on Ampere+, float16 (with GradScaler) on T4/P100
-    compile=True, # switched off automatically on GPUs older than sm70 (P100)
+    max_hours=1e9, # stop and save after this many hours (Kaggle sessions end at 9h on TPU, 12h on GPU)
+    dtype='auto', # 'auto' = bfloat16 on Ampere+, float16 (with GradScaler) on T4/P100; always bfloat16 on TPU
+    compile=True, # switched off automatically on GPUs older than sm70 (P100) and on TPU
     seed=1337,
+    device='auto', # 'auto', 'cuda' or 'tpu'
     ):
 
     start_time = time.time()
     # -----------------------------------------------------------------------------
-    device = 'cuda' # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1' etc., or try 'mps' on macbooks
-    major = torch.cuda.get_device_capability()[0]
-    if dtype == 'auto':
-        dtype = 'bfloat16' if major >= 8 else 'float16' # T4/P100 have no real bf16
-    compile = compile and major >= 7 # torch.compile needs Triton, which needs sm70+ (not P100)
+    tpu = pick_device(device) == 'tpu'
+    if tpu:
+        os.environ.setdefault('XLA_NO_SPECIAL_SCALARS', '1') # a new learning rate each step must not force a recompile
+        import torch_xla
+        import torch_xla.core.xla_model as xm
+        import torch_xla.runtime as xr
+        device = torch_xla.device() if hasattr(torch_xla, 'device') else xm.xla_device()
+        rank, world_size = xr.global_ordinal(), xr.world_size()
+        sync = torch_xla.sync if hasattr(torch_xla, 'sync') else xm.mark_step # run the queued XLA graph
+        dtype = 'bfloat16' # TPUs are bfloat16 native, so no GradScaler either
+        compile = False # torch.compile is for CUDA; XLA already compiles the graph
+        gradient_accumulation_steps = max(1, gradient_accumulation_steps // world_size)
+        eval_iters = max(1, eval_iters // world_size)
+    else:
+        device = 'cuda' # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1' etc., or try 'mps' on macbooks
+        rank, world_size = 0, 1
+        sync = lambda: None
+        major = torch.cuda.get_device_capability()[0]
+        if dtype == 'auto':
+            dtype = 'bfloat16' if major >= 8 else 'float16' # T4/P100 have no real bf16
+        compile = compile and major >= 7 # torch.compile needs Triton, which needs sm70+ (not P100)
+    master_process = rank == 0
+    _print = builtins.print
+    def print(*args, **kwargs): # only the master process prints
+        if master_process:
+            _print(*args, **kwargs)
     # -----------------------------------------------------------------------------
 
-    tokens_per_iter = gradient_accumulation_steps * batch_size * block_size
-    print(f"tokens per iteration will be: {tokens_per_iter:,} | dtype {dtype} | compile {compile}")
+    tokens_per_iter = gradient_accumulation_steps * world_size * batch_size * block_size
+    print(f"tokens per iteration will be: {tokens_per_iter:,} | {'tpu x%d' % world_size if tpu else 'cuda'} | dtype {dtype} | compile {compile}")
 
     os.makedirs(out_dir, exist_ok=True)
     torch.manual_seed(seed)
@@ -73,7 +113,10 @@ def main(
     torch.backends.cudnn.allow_tf32 = True # allow tf32 on cudnn
     # note: float16 data type will automatically use a GradScaler
     ptdtype = {'float32': torch.float32, 'bfloat16': torch.bfloat16, 'float16': torch.float16}[dtype]
-    ctx = torch.amp.autocast(device_type='cuda', dtype=ptdtype)
+    if tpu:
+        ctx = torch.autocast('xla', dtype=torch.bfloat16)
+    else:
+        ctx = torch.amp.autocast(device_type='cuda', dtype=ptdtype)
 
     # resume: out_dir/latest.pt wins over resume_from (so a restarted session keeps its own progress)
     model_args = dict(n_layer=n_layer, n_head=n_head,
@@ -85,15 +128,18 @@ def main(
     if resume_path:
         checkpoint = torch.load(resume_path, map_location='cpu', weights_only=True)
         assert checkpoint['model_args'] == model_args, f"config does not match {resume_path}: {checkpoint['model_args']}"
-        iter_num, best_val_loss, data_state = checkpoint['iter_num'], checkpoint['best_val_loss'], checkpoint['data_state']
-        print(f"resuming from {resume_path} at iteration {iter_num} (pass {data_state['epoch']}, {data_state['rows']} rows in)")
+        iter_num, best_val_loss = checkpoint['iter_num'], checkpoint['best_val_loss']
+        # rows are saved as the total over all cores, so a run can resume on different hardware
+        data_state = dict(checkpoint['data_state'], rows=checkpoint['data_state']['rows'] // world_size)
+        print(f"resuming from {resume_path} at iteration {iter_num} (pass {data_state['epoch']}, {data_state['rows'] * world_size} rows in)")
 
     tokenizer = Tokenizer.from_file(tokenizer_path)
     assert tokenizer.get_vocab_size() <= vocab_size, "tokenizer is larger than the model's vocab_size"
 
     def make_iter(name, buffer_size, shuffle_seed, skip):
-        # shuffle with a fixed seed, then skip rows already used, then tokenize (so skipped rows cost nothing)
-        ds = load_dataset(name, split="train", streaming=True).shuffle(seed=shuffle_seed, buffer_size=buffer_size).skip(skip)
+        # shuffle with a fixed seed, give this core its slice, skip rows already used, then tokenize (skipped rows cost nothing)
+        ds = load_dataset(name, split="train", streaming=True).shuffle(seed=shuffle_seed, buffer_size=buffer_size)
+        ds = split_dataset_by_node(ds, rank=rank, world_size=world_size).skip(skip)
         return iter(ds.map(lambda row: {"tokens": tokenizer.encode(row["content"]+"<stop>").ids}))
 
     iterators = {
@@ -127,6 +173,8 @@ def main(
 
         del buffer[:block_size*batch_size]
 
+        if tpu:
+            return x.to(device), y.to(device)
         # pin arrays x,y, which allows us to move them to GPU asynchronously (non_blocking=True)
         return x.pin_memory().to(device, non_blocking=True), y.pin_memory().to(device, non_blocking=True)
 
@@ -138,12 +186,16 @@ def main(
     if checkpoint:
         model.load_state_dict({k.removeprefix('_orig_mod.'): v for k, v in checkpoint['model'].items()})
     model.to(device)
+    if tpu:
+        model.transformer.wte.weight = model.lm_head.weight # make sure weight tying survived the move
+        if checkpoint is None and world_size > 1:
+            xm.broadcast_master_param(model) # every core starts from the master's weights
 
     # initialize a GradScaler. If enabled=False scaler is a no-op
-    scaler = torch.amp.GradScaler('cuda', enabled=(dtype == 'float16'))
+    scaler = torch.amp.GradScaler('cuda', enabled=(not tpu and dtype == 'float16'))
 
     # optimizer
-    optimizer = model.configure_optimizers(weight_decay, learning_rate, (beta1, beta2), 'cuda')
+    optimizer = model.configure_optimizers(weight_decay, learning_rate, (beta1, beta2), 'xla' if tpu else 'cuda')
     if checkpoint:
         optimizer.load_state_dict(checkpoint['optimizer'])
         scaler.load_state_dict(checkpoint['scaler'])
@@ -155,18 +207,25 @@ def main(
         print("compiling the model... (takes a ~minute)")
         model = torch.compile(model) # requires PyTorch 2.0
 
+    def save(obj, path):
+        if tpu:
+            xm.save(obj, path) # every core calls this: tensors go to the CPU and only the master writes
+        else:
+            torch.save(obj, path)
+
     def save_latest():
         # write to a temp file first so a crash mid-save cannot corrupt the previous checkpoint
-        torch.save({
+        save({
             'model': raw_model.state_dict(),
             'optimizer': optimizer.state_dict(),
             'scaler': scaler.state_dict(),
             'model_args': model_args,
             'iter_num': iter_num,
             'best_val_loss': best_val_loss,
-            'data_state': dict(data_state),
+            'data_state': dict(data_state, rows=data_state['rows'] * world_size),
         }, latest_path + '.tmp')
-        os.replace(latest_path + '.tmp', latest_path)
+        if master_process:
+            os.replace(latest_path + '.tmp', latest_path)
         print(f"saved resumable checkpoint at iteration {iter_num}")
 
     # estimates the validation loss on a fixed set of batches (drawn once, then reused)
@@ -182,7 +241,10 @@ def main(
                 logits, loss = model(X, Y)
             losses[k] = loss.item()
         model.train()
-        return losses.mean().item()
+        val = losses.mean()
+        if tpu: # average over the cores so they all agree on the number
+            val = (xm.all_reduce(xm.REDUCE_SUM, val.to(device)) / world_size).cpu()
+        return val.item()
 
     # learning rate decay scheduler (cosine with warmup)
     def get_lr(it):
@@ -203,13 +265,15 @@ def main(
     X, Y = get_batch('train') # fetch the very first batch
     t0 = time.time()
 
-    os.makedirs(os.path.dirname(log_dir) or ".", exist_ok=True)
+    f = csv_log_writer = None
     new_log = not (resume_path and os.path.exists(log_dir))
-    f = open(log_dir, "w" if new_log else "a")
-    csv_log_writer = csv.writer(f)
-    if new_log:
-        headers = ["iteration", "train_loss", "val_loss"]
-        csv_log_writer.writerow(headers)
+    if master_process:
+        os.makedirs(os.path.dirname(log_dir) or ".", exist_ok=True)
+        f = open(log_dir, "w" if new_log else "a")
+        csv_log_writer = csv.writer(f)
+        if new_log:
+            headers = ["iteration", "train_loss", "val_loss"]
+            csv_log_writer.writerow(headers)
 
     #setting up logging
     while True:
@@ -233,6 +297,9 @@ def main(
             X, Y = get_batch('train')
             # backward pass, with gradient scaling if training in fp16
             scaler.scale(loss).backward()
+            sync() # TPU: run this micro-step's graph now so the queued graph stays small
+        if tpu:
+            xm.reduce_gradients(optimizer) # average the gradients over the cores
         # clip the gradient
         if grad_clip != 0.0:
             scaler.unscale_(optimizer)
@@ -242,6 +309,7 @@ def main(
         scaler.update()
         # flush the gradients as soon as we can, no need for this memory anymore
         optimizer.zero_grad(set_to_none=True)
+        sync()
 
         # timing and logging
         t1 = time.time()
@@ -250,7 +318,10 @@ def main(
         if iter_num % log_interval == 0:
             # get loss as float. note: this is a CPU-GPU sync point
             # scale up to undo the division above, approximating the true total loss (exact would have been a sum)
-            lossf = loss.item() * gradient_accumulation_steps
+            lossf = loss.detach() * gradient_accumulation_steps
+            if tpu:
+                lossf = xm.all_reduce(xm.REDUCE_SUM, lossf) / world_size
+            lossf = lossf.item()
             print(f"iter {iter_num}: loss {lossf:.4f}, time {dt*1000:.0f}ms, {tokens_per_iter/dt:,.0f} tokens/s")
             train_loss = lossf
 
@@ -270,10 +341,10 @@ def main(
                         'best_val_loss': best_val_loss,
                     }
                     print(f"saving checkpoint to {out_dir}")
-                    torch.save(checkpoint, os.path.join(out_dir, 'ckpt.pt')) # the best model, as gen_pipe.py and sft.py load
+                    save(checkpoint, os.path.join(out_dir, 'ckpt.pt')) # the best model, as gen_pipe.py and sft.py load
                     checkpoint = None
 
-        if iter_num % log_interval == 0:
+        if iter_num % log_interval == 0 and master_process:
             csv_log_writer.writerow([iter_num, train_loss, val_loss])
             f.flush()
 
@@ -286,10 +357,16 @@ def main(
 
         # termination conditions
         out_of_time = time.time() - start_time > max_hours * 3600
+        if tpu: # every core must make the same decision or the collectives hang
+            out_of_time = bool(xm.all_reduce(xm.REDUCE_MAX, torch.tensor(float(out_of_time), device=device)).item())
         if iter_num > max_iters or out_of_time:
             save_latest()
             print("time budget reached, rerun to resume" if out_of_time and iter_num <= max_iters else "done")
             break
+
+
+def _tpu_entry(index, config): # torch_xla.launch runs this once per TPU core
+    main(**config)
 
 
 if __name__ == "__main__":
@@ -308,4 +385,13 @@ if __name__ == "__main__":
     config = asdict(module.TrainingConfig())
     if args.resume_from:
         config["resume_from"] = args.resume_from
-    main(**config)
+    if pick_device(config.get("device", "auto")) == 'tpu':
+        os.environ.setdefault('XLA_NO_SPECIAL_SCALARS', '1')
+        import torch_xla
+        if hasattr(torch_xla, 'launch'):
+            torch_xla.launch(_tpu_entry, args=(config,))
+        else:
+            import torch_xla.distributed.xla_multiprocessing as xmp
+            xmp.spawn(_tpu_entry, args=(config,))
+    else:
+        main(**config)
