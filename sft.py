@@ -1,295 +1,140 @@
-#This is a stripped out version of the training file for nanoGPT based on Project 1 specification. 
-#Nano gpt can be found here https://github.com/karpathy/nanoGPT/blob/master/data/shakespeare/prepare.py
-
+# Bare-bones SFT: given a code prefix, learn to finish the function/class and emit <stop>.
+# Each example is a complete ast-valid unit cut at a random point; the loss covers only the completion.
 
 import argparse
+import ast
 import importlib
 import os
-import time
-import math
-from contextlib import nullcontext
-from tokenizers import Tokenizer
-import torch
-from torch.nn.parallel import DistributedDataParallel as DDP
-from datasets import load_dataset
-from model import GPTConfig, GPT
+import random
+import re
+import shutil
 from dataclasses import asdict
-import csv
+
+import torch
+from datasets import load_dataset
+from tokenizers import Tokenizer
+
+from model import GPT, GPTConfig
+
+FENCE = re.compile(r"^\s*```[A-Za-z]*\n|\n?```\s*$")
 
 
-
-def main( 
-    out_dir,
-    log_dir: str,
-    eval_iters,
-    eval_interval,
-    log_interval,
-    gradient_accumulation_steps, # used to simulate larger batch sizes,
-    batch_size,
-    block_size,
-    n_layer,
-    n_head,
-    n_embed,
-    learning_rate,
-    lr_decay_iters,
-    max_iters,
-    weight_decay,
-    beta1,
-    beta2,
-    grad_clip,
-    warmup_iters,
-    min_lr,
-    vocab_size,
-    dataset_name,
-    tokenizer_path
-    ):
-
-    # -----------------------------------------------------------------------------
-    # DDP settings
-    backend = 'nccl' # 'nccl', 'gloo', etc.
-    # system
-    device = 'cuda' # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1' etc., or try 'mps' on macbooks
-    dtype = 'bfloat16' if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else 'float16' # 'float32', 'bfloat16', or 'float16', the latter will auto implement a GradScaler
-    compile = True # use PyTorch 2.0 to compile the model to be faster
-    # -----------------------------------------------------------------------------
-
-    
-    # if not ddp, we are running on a single gpu, and one process
-    master_process = True
-    seed_offset = 0
-    ddp_world_size = 1
-    tokens_per_iter = gradient_accumulation_steps * ddp_world_size * batch_size * block_size
-    print(f"tokens per iteration will be: {tokens_per_iter:,}")
-
-    if master_process:
-        os.makedirs(out_dir, exist_ok=True)
-    torch.manual_seed(1337 + seed_offset)
-    torch.backends.cuda.matmul.allow_tf32 = True # allow tf32 on matmul
-    torch.backends.cudnn.allow_tf32 = True # allow tf32 on cudnn
-    device_type = 'cuda' if 'cuda' in device else 'cpu' # for later use in torch.autocast
-    # note: float16 data type will automatically use a GradScaler
-    ptdtype = {'float32': torch.float32, 'bfloat16': torch.bfloat16, 'float16': torch.float16}[dtype]
-    ctx = nullcontext() if device_type == 'cpu' else torch.amp.autocast(device_type=device_type, dtype=ptdtype)
-
-    def get_datasets(dataset_name, tokenizer_path):
-        tokenizer = Tokenizer.from_file(tokenizer_path)
-        ds_train = load_dataset(dataset_name, split="train", streaming=True)
-        # print(next(iter(ds_train)))
-        ds_train_tokenized = ds_train.map(
-            lambda row: {"tokens": tokenizer.encode(row["content"]+"<stop>").ids},
-        )
-        ds_train_shuffled = ds_train_tokenized.shuffle(buffer_size = 1000)
-        ds_train_iter = iter(ds_train_shuffled)
-
-        ds_val = load_dataset("codeparrot/codeparrot-clean-valid", split="train", streaming=True)
-        ds_val_tokenized = ds_val.map(
-            lambda row: {"tokens": tokenizer.encode(row["content"]+"<stop>").ids},
-        )
-        ds_val_shuffled = ds_val_tokenized.shuffle(buffer_size = 500)
-        ds_val_iter = iter(ds_val_shuffled)
-
-        return ds_train_iter, ds_val_iter
+def extract_units(code):
+    """Top-level defs/classes of `code`, or the whole snippet if it has none."""
+    code = FENCE.sub("", code)
+    try:
+        tree = ast.parse(code)
+    except (SyntaxError, ValueError, RecursionError):
+        return []
+    defs = [n for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))]
+    if not defs:
+        return [code.strip() + "\n"] if code.strip() else []
+    return [ast.get_source_segment(code, n) + "\n" for n in defs]
 
 
-    ds_train_iter, ds_val_iter = get_datasets(dataset_name, tokenizer_path)
+def make_examples(units, tokenizer, stop_id, max_seq_len, cuts_per_unit):
+    """Returns (token ids ending in <stop>, cut index) pairs; tokens before the cut are the prefix."""
+    examples = []
+    for unit in units:
+        enc = tokenizer.encode(unit)
+        n = len(enc.ids)
+        if n < 8 or n + 1 > max_seq_len:
+            continue
+        # cut indices where the token starts a line (or follows only indentation)
+        line_cuts = [k for k in range(4, n)
+                     if not unit[unit.rfind("\n", 0, enc.offsets[k][0]) + 1:enc.offsets[k][0]].strip()]
+        for _ in range(cuts_per_unit):
+            k = random.choice(line_cuts) if line_cuts and random.random() < 0.5 else random.randrange(4, n)
+            examples.append((torch.tensor(enc.ids + [stop_id]), k))
+    return examples
 
-    train_buffer = []
-    val_buffer = []
+
+def main(out_dir, init_from, dataset_name, code_column, tokenizer_path, log_dir, max_rows,
+         max_seq_len, cuts_per_unit, batch_size, learning_rate, max_iters, eval_interval, eval_iters):
+    random.seed(1337)
+    torch.manual_seed(1337)
+    ctx = torch.autocast('cuda', dtype=torch.bfloat16)
+
+    # gen_pipe.py looks for the tokenizer next to python-coder/, so copy it there
+    os.makedirs(os.path.join(os.path.dirname(out_dir.rstrip("/")), "tokenizer"), exist_ok=True)
+    shutil.copy(tokenizer_path, os.path.join(os.path.dirname(out_dir.rstrip("/")), "tokenizer", "bpe_tokenizer.json"))
+
+    # ---- data: split units into train/val first so cuts of one unit never land in both ----
+    tokenizer = Tokenizer.from_file(tokenizer_path)
+    stop_id = tokenizer.token_to_id("<stop>")
+    units = []
+    for i, row in enumerate(load_dataset(dataset_name, split="train", streaming=True)):
+        if i >= max_rows:
+            break
+        units += extract_units(row[code_column])
+    units = list({re.sub(r"\s+", " ", u).strip(): u for u in units}.values())  # dedupe, or train/val share copies
+    random.shuffle(units)
+    n_val = max(1, len(units) // 30)
+    splits = {
+        'val': make_examples(units[:n_val], tokenizer, stop_id, max_seq_len, cuts_per_unit),
+        'train': make_examples(units[n_val:], tokenizer, stop_id, max_seq_len, cuts_per_unit),
+    }
+    print({k: len(v) for k, v in splits.items()}, "examples")
 
     def get_batch(split):
+        x = torch.zeros(batch_size, max_seq_len - 1, dtype=torch.long)
+        y = torch.full_like(x, -1)  # -1 = ignored by the loss (padding and prefix)
+        for b, (seq, k) in enumerate(random.choices(splits[split], k=batch_size)):
+            x[b, :len(seq) - 1] = seq[:-1]
+            y[b, k - 1:len(seq) - 1] = seq[k:]
+        return x.cuda(), y.cuda()
 
-        if split == 'train':
-            buffer = train_buffer
-            iterator = ds_train_iter
-        else:
-            buffer = val_buffer
-            iterator = ds_val_iter
+    # ---- model: start from the pretrained checkpoint ----
+    checkpoint = torch.load(init_from, map_location='cpu', weights_only=True)
+    model = GPT(GPTConfig(**checkpoint['model_args']))
+    # checkpoints saved from a compiled model have an `_orig_mod.` prefix on every key
+    model.load_state_dict({k.removeprefix('_orig_mod.'): v for k, v in checkpoint['model'].items()})
+    model.cuda()
+    optimizer = model.configure_optimizers(0.1, learning_rate, (0.9, 0.95), 'cuda')
 
-        while len(buffer) < block_size * batch_size + 1:
-            # print(f"Type: {type(sample)}, value: {sample}")
-            buffer.extend(next(iterator)["tokens"])
-
-        # ix = torch.randint(len(data) - block_size, (batch_size,))
-        data = torch.tensor(buffer[:block_size*batch_size + 1], dtype=torch.int64)
-        x = data[:block_size*batch_size].view(batch_size, block_size)
-        y = data[1:block_size*batch_size + 1].view(batch_size, block_size)
-
-        del buffer[:block_size*batch_size]
-
-        if device_type == 'cuda':
-            # pin arrays x,y, which allows us to move them to GPU asynchronously (non_blocking=True)
-            x, y = x.pin_memory().to(device, non_blocking=True), y.pin_memory().to(device, non_blocking=True)
-        else:
-            x, y = x.to(device), y.to(device)
-
-        return x, y
-
-    iter_num = 0
-    best_val_loss = 1e9
-
-    # model init
-    model_args = dict(n_layer=n_layer, n_head=n_head, 
-                      n_embd=n_embed, block_size=block_size,
-                      bias=False, vocab_size=vocab_size) # start with model_args from command line
-    # init a new model from scratch
-    print("Initializing a new model from scratch")
-    print(f"Model args: {model_args}")
-    gptconf = GPTConfig(**model_args)
-    model = GPT(gptconf)
-    # crop down the model block size if desired, using model surgery
-    model.to(device)
-
-    # initialize a GradScaler. If enabled=False scaler is a no-op
-    scaler = torch.cuda.amp.GradScaler(enabled=(dtype == 'float16'))
-
-    # optimizer
-    optimizer = model.configure_optimizers(weight_decay, learning_rate, (beta1, beta2), device_type)
-    checkpoint = None # free up memory
-
-    # compile the model
-    if compile:
-        print("compiling the model... (takes a ~minute)")
-        model = torch.compile(model) # requires PyTorch 2.0
-
-
-    # helps estimate an arbitrarily accurate loss over either split using many batches
     @torch.no_grad()
     def estimate_loss():
-        out = {}
         model.eval()
+        out = []
         for split in ['train', 'val']:
-            losses = torch.zeros(eval_iters)
-            for k in range(eval_iters):
-                X, Y = get_batch(split)
+            losses = []
+            for _ in range(eval_iters):
                 with ctx:
-                    logits, loss = model(X, Y)
-                losses[k] = loss.item()
-            out[split] = losses.mean()
+                    losses.append(model(*get_batch(split))[1].item())
+            out.append(sum(losses) / len(losses))
         model.train()
         return out
 
-    # learning rate decay scheduler (cosine with warmup)
-    def get_lr(it):
-        # 1) linear warmup for warmup_iters steps
-        if it < warmup_iters:
-            return learning_rate * (it + 1) / (warmup_iters + 1)
-        # 2) if it > lr_decay_iters, return min learning rate
-        elif it > lr_decay_iters:
-            return min_lr
-        # 3) in between, use cosine decay down to min learning rate
-        elif lr_decay_iters != None:
-            decay_ratio = (it - warmup_iters) / (lr_decay_iters - warmup_iters)
-            assert 0 <= decay_ratio <= 1
-            coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio)) # coeff ranges 0..1
-            return min_lr + coeff * (learning_rate - min_lr)
-        else:
-            return learning_rate
+    # ---- train ----
+    os.makedirs(out_dir, exist_ok=True)
+    os.makedirs(os.path.dirname(log_dir), exist_ok=True)
+    log = open(log_dir, "w")
+    log.write("iteration,train_loss,val_loss\n")
+    best_val = float('inf')
+    model.train()
+    for it in range(max_iters + 1):
+        if it % eval_interval == 0:
+            train_loss, val_loss = estimate_loss()
+            print(f"step {it}: train loss {train_loss:.4f}, val loss {val_loss:.4f}")
+            log.write(f"{it},{train_loss},{val_loss}\n")
+            log.flush()
+            if val_loss < best_val and it > 0:
+                best_val = val_loss
+                torch.save({'model': model.state_dict(), 'model_args': checkpoint['model_args'],
+                            'iter_num': it, 'best_val_loss': best_val}, os.path.join(out_dir, 'ckpt.pt'))
 
-
-    # training loop
-    X, Y = get_batch('train') # fetch the very first batch
-    t0 = time.time()
-    local_iter_num = 0 # number of iterations in the lifetime of this process
-    raw_model =  model # unwrap DDP container if needed
-    running_mfu = -1.0
-
-    os.makedirs("/".join(log_dir.split("/")[:-1]), exist_ok=True)
-    f = open(log_dir, "w")
-    csv_log_writer = csv.writer(f)
-
-    headers = ["iteration", "train_loss", "val_loss"]
-    csv_log_writer.writerow(headers)
-
-    #setting up logging
-    while True:
-
-        train_loss = ""
-        val_loss = ""
-
-        # determine and set the learning rate for this iteration
-        lr = get_lr(iter_num) if (lr_decay_iters != None or warmup_iters != None) else learning_rate
-        for param_group in optimizer.param_groups:
-            param_group['lr'] = lr
-
-
-        # forward backward update, with optional gradient accumulation to simulate larger batch size
-        # and using the GradScaler if data type is float16
-        for micro_step in range(gradient_accumulation_steps):
-            with ctx:
-                logits, loss = model(X, Y)
-                loss = loss / gradient_accumulation_steps # scale the loss to account for gradient accumulation
-            # immediately async prefetch next batch while model is doing the forward pass on the GPU
-            X, Y = get_batch('train')
-            # backward pass, with gradient scaling if training in fp16
-            scaler.scale(loss).backward()
-        # clip the gradient
-        if grad_clip != 0.0:
-            scaler.unscale_(optimizer)
-            torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
-        # step the optimizer and scaler if training in fp16
-        scaler.step(optimizer)
-        scaler.update()
-        # flush the gradients as soon as we can, no need for this memory anymore
+        with ctx:
+            _, loss = model(*get_batch('train'))
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+        optimizer.step()
         optimizer.zero_grad(set_to_none=True)
-
-        # timing and logging
-        t1 = time.time()
-        dt = t1 - t0
-        t0 = t1
-        if iter_num % log_interval == 0 and master_process:
-            # get loss as float. note: this is a CPU-GPU sync point
-            # scale up to undo the division above, approximating the true total loss (exact would have been a sum)
-            lossf = loss.item() * gradient_accumulation_steps
-            if local_iter_num >= 5: # let the training loop settle a bit
-                mfu = raw_model.estimate_mfu(batch_size * gradient_accumulation_steps, dt)
-                running_mfu = mfu if running_mfu == -1.0 else 0.9*running_mfu + 0.1*mfu
-            print(f"iter {iter_num}: loss {lossf:.4f}, time {dt*1000:.2f}ms, mfu {running_mfu*100:.2f}%")
-            train_loss = lossf
-
-        
-        # evaluate the loss on train/val sets and write checkpoints
-        if iter_num % eval_interval == 0 and master_process:
-            losses = estimate_loss()
-            print(f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
-
-            if losses['val'] < best_val_loss:
-                best_val_loss = losses['val']
-                if iter_num > 0:
-                    checkpoint = {
-                        'model': raw_model.state_dict(),
-                        'optimizer': optimizer.state_dict(),
-                        'model_args': model_args,
-                        'iter_num': iter_num,
-                        'best_val_loss': best_val_loss,
-                    }
-                    print(f"saving checkpoint to {out_dir}")
-                    torch.save(checkpoint, os.path.join(out_dir, 'ckpt.pt'))
-
-            train_loss = losses["train"].item()
-            val_loss = losses["val"].item()
-
-        f.flush()
-
-        if iter_num % log_interval == 0:
-            csv_log_writer.writerow([iter_num, train_loss, val_loss])
-            
-
-        iter_num += 1
-        local_iter_num += 1
-
-        # termination conditions
-        if iter_num > max_iters:
-            break
 
 
 if __name__ == "__main__":
     argument_parser = argparse.ArgumentParser()
-    argument_parser.add_argument(
-        "-c", "--config", required=True
-    )
+    argument_parser.add_argument("-c", "--config", required=True)
     args = argument_parser.parse_args()
-    # accept either a module name (configs.base_config) or a path (configs/base_config.py)
-    config_name = args.config.replace("/", ".")
-    module = importlib.import_module(config_name)
-
+    # accept either a module name or a path like configs/training_configs/sft_config.py
+    module = importlib.import_module(args.config.removesuffix(".py").replace("/", "."))
     main(**asdict(module.TrainingConfig()))

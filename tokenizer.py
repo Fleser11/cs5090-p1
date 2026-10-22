@@ -11,12 +11,15 @@ tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False)
 trainer = BpeTrainer(
     vocab_size=8192,
     min_frequency=4,
-    special_tokens=["<stop>", "<instruction>","<code>"], 
+    special_tokens=["<stop>"], 
 )
 tokenizer.decoder = decoders.ByteLevel()
 
-tokenizer.train(["data/train_plaintext.txt"], trainer)
+tokenizer.train(["data/tokenizer_text.txt"], trainer)
 
 tokenizer_path = "output/base_model/tokenizer/bpe_tokenizer.json"
+tokenizer_path_2 = "output/mega_model/tokenizer/bpe_tokenizer.json"
 os.makedirs("/".join(tokenizer_path.split("/")[:-1]), exist_ok=True)
+os.makedirs("/".join(tokenizer_path_2.split("/")[:-1]), exist_ok=True)
 tokenizer.save(tokenizer_path)
+tokenizer.save(tokenizer_path_2)

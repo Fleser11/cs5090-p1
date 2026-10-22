@@ -1,0 +1,206 @@
+test_num,input_prompt,output,issue,severity,explanation
+1,"class LinkedList:
+    def __init__(self,","class LinkedList:
+    def __init__(self, name, path, is_new, new_index, new_index, parent_id, child_id, parent_id, child_id, parent_id, parent_id, parent_id, parent_id, parent_",syntax,high,"began looping child and parent_id. It is easily visible, and would be immediately obvious as would not compile."
+2,"def __init__(self, a, b, c)
+    self.a = ","def __init__(self, a, b, c)
+    self.a =  a
+    self.b = b
+    self.b = a
+
+    # …………………………",wrong-logic,medium,"Rather than saving the value of c overrides b with the value of a. Is obviously wrong as the pattern should suggest saving c and overriding the saved value of b is nonsensicle. If not noticed manually could slip through unit tests."
+3,"print(f""value of 2 + 3 = {","print(f""value of 2 + 3 = {value, value}"")
+    print(""x = "", str(value) * 1000 + "" "" + repr(value) + ""\n"")
+    print(""x = "", str(value) + ""\n"")
+    print(""x",context-ignored,medium,"the output is rather nonsensicle and immediately obvious. It follows the general idea of the code prefix, but doesn't follow the very obvious indication of what it is supposed to do. This specific example may go unnoticed by unit tests as well. "
+4,integers = [(i+1) of i in range(,"integers = [(i+1) of i in range(len(a) - 1)]
+        # Check that the native name.
+        a = np.array([b, i+1, n-1, i+1, i+1])
+        a = np.array",wrong-logic,low,"the code uses unknown variables which immediately signals that it is wrong or at least making assumptions. Fortunately if a or any of the other variables did not exist it would be caught by the compiler."
+5,"def reverseList(list):
+    """"""","def reverseList(list):
+    """""" Return list of list of List List List List
+
+    """"""
+    all_ ListList List List List List List List List List List List List List List List List List List List List List List List List List List List List List List List List",syntax,low,"the model gets caught in a loop and doesn't do anything meaningful. This is also a syntax error and would be caught."
+6,if __name__ == ,"if __name__ ==  software
+# specifications are distributed on this software.
+#    License is distributed on an ""AS IS"" BASIS,
+#    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#    See the License for the specific",memorised,low,"The model generates a license disclosure in the wrong place, which is an obvious failure. It would likely be caught as software almost certainly has no menaing and would be seen by unit tests."
+7,while (True):,"while (True):
+        user = User.objects.get(name='user', id=5)
+        if not user:
+            return False
+
+        user.save()
+        user.save()
+
+        return True
+
+    def",wrong-logic,low,"model attempts to make a guess as to what is happening, but ends up making things up and performns weird actions while doing so. Though all of the code seems to follow the structure of python, but does wrong work such as saving user multiple times."
+8,"class BinaryTree:
+    """"""
+    ","class BinaryTree:
+    """"""
+     Relative base class, a class is a string, but its name.
+    """"""
+
+    def __init__(self, name=None, **kwargs):
+        self.name = name or self.name
+        self.",wrong-llogic,low,"in this case the model is encouraged to generate a docstring, however it struggles to generate valid english. there is also a initialization which doesn't make sense."
+9,"def print_num(number):
+    """"""
+    Args:
+        value: the value printed
+    """"""
+    print(","def print_num(number):
+    """"""
+    Args:
+        value: the value printed
+    """"""
+    print(
+        ' ' * num
+               + '    '    %(num1.0)"" % number)
+    print(
+        ' ({:1, 1}: {1}: {1}: {1}:",syntax,low,"The model generates nonsense, this would almost certainly be caught by the unit tests"
+10,"def addNums(a, b):
+    """"""
+    returns the value of a + b
+    """"""","def addNums(a, b):
+    """"""
+    returns the value of a + b
+    """"""
+    for attr in ['a', 'b', 'c', 'm', 'e', 'h', 'n', 'x', 'k','h', 'i', 'k','v']:
+        if attr in a:
+",context-ignored,low,"the model is given the answer in the doc-string, however it ignores it. It instead makes up something. This may not be caught by unit tests depending on if they are checking teh output or are just looking for compilation."
+11,"def addNums(b, a):
+    """"""
+    returns the value of b + a
+    """"""","def addNums(b, a):
+    """"""
+    returns the value of b + a
+    """"""
+    return b - b
+
+#
+def removeIncludes(a, b):
+    """"""
+    returns the value of b + a
+    """"""
+    return b
+
+#
+
+class SinceNotSubset",prompt-sensitive,low,"The model returns something that is *closer* to the actual correct code, however it still ignores context. However, was very sensitive to the slight input change."
+12,"class person:
+    def __init(self, ","class person:
+    def __init(self, zer, fs, fs, **kwargs):
+        super( person, self).__init__()
+        self.fs = fs
+
+    def _create_person_id(self, fs, fs, f",wrong-logic,low,"model obviously generates parameters that dont' make sense and attempt to call a super class for a class that doesn't inherit any class. However, it does use relevant context."
+13,"def highEnough(val):
+    if val > self.min:
+        ","def highEnough(val):
+    if val > self.min:
+         s = np.where(val > min(val))
+      if not self.min:
+         return
+         if self.max:
+             return
+         if self.max:
+             return
+         if self.max:",wrong-logic,low,"ignores an obvious interpretation and gets into a loop. It likely would be caught by unit tests as the code does not operate correctly."
+14,"def getMax(a, b):
+    """"""
+    returns the greater value between a and b:
+    return a if a > b else b
+    """"""
+    return a","def getMax(a, b):
+    """"""
+    returns the greater value between a and b:
+    return a if a > b else b
+    """"""
+    return a + b
+
+
+def getMax(a, b):
+    """"""
+    returns the greater value between a and b:
+    returns the greater value between a and b:
+    return a if a > b else b
+   ",context-ignored,low,"once again ignores the obvious context of the code that it is meant to generate. Likely would be caught by unit tests as it would not do what it is meant to."
+15,"class listManager:
+    def __init__(self):
+        self.list = []
+    
+    def getMinimum(self):
+        return ","class listManager:
+    def __init__(self):
+        self.list = []
+    
+    def getMinimum(self):
+        return uts(self.list)
+
+    def getMinimum(self):
+        return self.list[:2]
+
+    def setMinimum(self, val):
+        return self.list[:2]
+
+   ",invented-api,low,"The model makes up some kind of function called uts. This wouldn't work as there isn't something like this defined. It would likely be caught by unit tests."
+16,"import os
+""creating directory /home/testing.txt""
+os.makedirs(","import os
+""creating directory /home/testing.txt""
+os.makedirs(os.path.join(os.path.dirname(u""in_dir""))))
+
+
+if __name__ == '__main__':
+    unittest.main()
+<stop>",context-ignored,low,"model ignores the comment before it describing how it should operate. Instead choosing its own directory to make. This would be caught by unit tests."
+17,"""""""
+Testing file for the LinkedList class, includes test for:
+1. attempting to remove from empty list,
+2. inserting an item
+""""""","""""""
+Testing file for the LinkedList class, includes test for:
+1. attempting to remove from empty list,
+2. inserting an item
+""""""
+
+import functools
+
+
+class TestCtr(object):
+    def __init__(self):
+        super().setUp()
+        self.link = link
+
+    def load_new_parent_link(self",wrong-logic,medium,"Themodel fails to build any type of meaningful test. This would be difficult for unit tests to detect as there ins't normally unit tests for the stests themselves."
+18,"class Class:
+    def __init__(self):
+        self.a = 2
+    
+    #initializer:
+    def ","class Class:
+    def __init__(self):
+        self.a = 2
+    
+    #initializer:
+    def Equal(self, i):
+        return self.a, self.a, i
+    
+    def Equal(self, i):
+        return self.a
+    
+    def __ne__(self):
+        self.a =",syntax,medium,"The model does a good job initially recognizing that it can't re-initialize the class, however it then loops on the equal function. This would fail to compile."
+19,"print(""Hello ","print(""Hello                 �",syntax,high,"generates some kind of special character. This may not get caught as it is in a print statement, and may crash the program depending on the context."
+20,"while True:
+    print(""input -1 to stop"")
+    x = input(""what is your input"")","while True:
+    print(""input -1 to stop"")
+    x = input(""what is your input"")
+    assert x.shape[0] == 1, ""aes aes bay bay bay bay bay bay bay bay bay bay bay bay hy bay bay bay b",wrong-logic,low,"model gets caught in a loop and generates nonsense text. This would likely get caught by unit tests as it doesn't make sense and would throw an error. "

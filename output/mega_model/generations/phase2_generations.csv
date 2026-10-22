@@ -1,0 +1,672 @@
+test_num,input_prompt,output
+1,"from collections import deque
+from collections.abc import Generator
+from dataclasses import dataclass
+
+
+# https://en.wikipedia.org/wiki/Tree_traversal
+@dataclass
+class Node:
+    data: int
+    left: Node | None = None
+    right: Node | None = None
+
+
+def make_tree() -> Node | None:
+    r""""""
+    The below tree
+        1
+       / \
+      2   3
+     / \
+    4   5
+    """"""
+    tree = Node(1)
+    tree.left = ","from collections import deque
+from collections.abc import Generator
+from dataclasses import dataclass
+
+
+# https://en.wikipedia.org/wiki/Tree_traversal
+@dataclass
+class Node:
+    data: int
+    left: Node | None = None
+    right: Node | None = None
+
+
+def make_tree() -> Node | None:
+    r""""""
+    The below tree
+        1
+       / \
+      2   3
+     / \
+    4   5
+    """"""
+    tree = Node(1)
+    tree.left = ())
+    tree.right = ())
+    return tree
+
+
+def make_index():
+    """"""
+    Construct a graph as an index graph.
+
+    The resulting graph is then an index graph.
+
+"
+2,"class Node:
+    def __init__(self, data: Any) -> None:
+        self.data = data
+        self.previous: Node | None = None
+        self.next: Node | None = None
+
+    def __str__(self) -> str:
+        return f""{self.data}""
+
+class DoublyLinkedList:
+    def __init__(self) -> None:
+        self.head: Node | None = None
+        self.tail: Node | None = None
+    
+    def insert_at_head(self, data) -> None:
+        self.insert_at_nth(0, data)
+
+    def insert_at_tail(self, data) -> None:
+        self.","class Node:
+    def __init__(self, data: Any) -> None:
+        self.data = data
+        self.previous: Node | None = None
+        self.next: Node | None = None
+
+    def __str__(self) -> str:
+        return f""{self.data}""
+
+class DoublyLinkedList:
+    def __init__(self) -> None:
+        self.head: Node | None = None
+        self.tail: Node | None = None
+    
+    def insert_at_head(self, data) -> None:
+        self.insert_at_nth(0, data)
+
+    def insert_at_tail(self, data) -> None:
+        self.insert_at_nth(0, data)
+
+class Node:
+    def __init__(self, data: Any) -> None:
+        self.data: Node | None = None
+        self.current: Node |"
+3,"class Fibonacci:
+    def __init__(self) -> None:
+        self.sequence = [0, 1]
+
+    def get(self, index: int) -> list:
+        """"""","class Fibonacci:
+    def __init__(self) -> None:
+        self.sequence = [0, 1]
+
+    def get(self, index: int) -> list:
+        """"""
+        :param index:
+        :return:
+        """"""
+        return self._get_sequences(index)
+
+
+class Fbonacci:
+    def __init__(self) -> None:
+        self"
+4,"from abc import abstractmethod
+
+from .number_theory.prime_numbers import next_prime
+
+
+class HashTable:
+    """"""
+    Basic Hash Table example with open addressing and linear probing
+    """"""
+
+    def __init__(
+        self,
+        size_table: int,
+        charge_factor: int | None = None,
+        lim_charge: float | None = None,
+    ) -> None:
+        self.size_table = size_table
+        self.values = [None] * self.size_table
+        self.lim_charge = 0.75 if lim_charge is None else lim_charge
+        self.charge_factor = 1 if charge_factor is None else charge_factor
+        self.__aux_list: list = []
+        self._keys: dict = {}
+
+    def insert_data(self, data) -> None:
+        """"""","from abc import abstractmethod
+
+from .number_theory.prime_numbers import next_prime
+
+
+class HashTable:
+    """"""
+    Basic Hash Table example with open addressing and linear probing
+    """"""
+
+    def __init__(
+        self,
+        size_table: int,
+        charge_factor: int | None = None,
+        lim_charge: float | None = None,
+    ) -> None:
+        self.size_table = size_table
+        self.values = [None] * self.size_table
+        self.lim_charge = 0.75 if lim_charge is None else lim_charge
+        self.charge_factor = 1 if charge_factor is None else charge_factor
+        self.__aux_list: list = []
+        self._keys: dict = {}
+
+    def insert_data(self, data) -> None:
+        """"""
+        Inserts data to the database.
+        """"""
+        if self(data) is not None:
+            self._keys[data.id] = data
+            self._len += data.size
+            self.size"
+5,"    def insert_data(self, data) -> None:
+        """"""
+        insert_data is used for inserting a single element at a time in the HashTable.
+
+        Examples:
+
+        >>> ht = HashTable(3)
+        >>> ht.insert_data(5)
+        >>> ht.keys()
+        {2: 5}
+        >>> ht = HashTable(5)
+        >>> ht.insert_data(30)
+        >>> ht.insert_data(50)
+        >>> ht.keys()
+        {0: 30, 1: 50}
+        """"""
+        key = self.hash_function(data)
+
+        if self.values[key] is None:
+            self._set_value(key, data)
+
+        elif self.values[key] == data:
+            pass
+
+        else:
+            collision_resolution = self._collision_resolution(key, data)
+            if collision_resolution is not None:
+                self._set_value(collision_resolution, data)
+            else:
+                self.rehashing()
+                self.insert_data(data)","    def insert_data(self, data) -> None:
+        """"""
+        insert_data is used for inserting a single element at a time in the HashTable.
+
+        Examples:
+
+        >>> ht = HashTable(3)
+        >>> ht.insert_data(5)
+        >>> ht.keys()
+        {2: 5}
+        >>> ht = HashTable(5)
+        >>> ht.insert_data(30)
+        >>> ht.insert_data(50)
+        >>> ht.keys()
+        {0: 30, 1: 50}
+        """"""
+        key = self.hash_function(data)
+
+        if self.values[key] is None:
+            self._set_value(key, data)
+
+        elif self.values[key] == data:
+            pass
+
+        else:
+            collision_resolution = self._collision_resolution(key, data)
+            if collision_resolution is not None:
+                self._set_value(collision_resolution, data)
+            else:
+                self.rehashing()
+                self.insert_data(data)
+            self.index.update(data)
+
+    def insert_array(self, data):
+        """"""
+        insert_array is used for inserting a single array at a time in the HashTable.
+
+       "
+6,"class Stack[T]:
+    """"""A stack is an abstract data type that serves as a collection of
+    elements with two principal operations: push() and pop(). push() adds an
+    element to the top of the stack, and pop() removes an element from the top
+    of a stack. The order in which elements come off of a stack are
+    Last In, First Out (LIFO).
+    https://en.wikipedia.org/wiki/Stack_(abstract_data_type)
+    """"""
+
+    def __init__(self, limit: int = 10) -> None:
+        self.stack: list[T] = []
+        self.limit = limit
+
+    def push(self, data: T) -> None:
+        """"""
+        Push an element to the top of the stack.
+
+        >>> S = Stack(2) # stack size = 2
+        >>> S.push(10)
+        >>> S.push(20)
+        >>> print(S)
+        [10, 20]
+
+        >>> S = Stack(1) # stack size = 1
+        >>> S.push(10)
+        >>> S.push(20)
+        Traceback (most recent call last):
+        ...
+        data_structures.stacks.stack.StackOverflowError
+
+        """"""
+        if len(self.stack) >= self.limit:
+            raise StackOverflowError
+        self.stack.append(data)","class Stack[T]:
+    """"""A stack is an abstract data type that serves as a collection of
+    elements with two principal operations: push() and pop(). push() adds an
+    element to the top of the stack, and pop() removes an element from the top
+    of a stack. The order in which elements come off of a stack are
+    Last In, First Out (LIFO).
+    https://en.wikipedia.org/wiki/Stack_(abstract_data_type)
+    """"""
+
+    def __init__(self, limit: int = 10) -> None:
+        self.stack: list[T] = []
+        self.limit = limit
+
+    def push(self, data: T) -> None:
+        """"""
+        Push an element to the top of the stack.
+
+        >>> S = Stack(2) # stack size = 2
+        >>> S.push(10)
+        >>> S.push(20)
+        >>> print(S)
+        [10, 20]
+
+        >>> S = Stack(1) # stack size = 1
+        >>> S.push(10)
+        >>> S.push(20)
+        Traceback (most recent call last):
+        ...
+        data_structures.stacks.stack.StackOverflowError
+
+        """"""
+        if len(self.stack) >= self.limit:
+            raise StackOverflowError
+        self.stack.append(data)
+        if data.is_empty():
+            raise StackOverflowError
+        self.stack.append(data.pop(0))
+        self.limit = self.limit - 1
+
+    def pop(self)"
+7,"class BinaryHeap:
+    """"""
+    A max-heap implementation in Python
+    >>> binary_heap = BinaryHeap()
+    >>> binary_heap.insert(6)
+    >>> binary_heap.insert(10)
+    >>> binary_heap.insert(15)
+    >>> binary_heap.insert(12)
+    >>> binary_heap.pop()
+    15
+    >>> binary_heap.pop()
+    12
+    >>> binary_heap.get_list
+    [10, 6]
+    >>> len(binary_heap)
+    2
+    """"""
+
+    def __init__(self) -> None:
+        self.__heap = [0]
+        self.__size = 0
+
+    def __swap_up(self, i: int) -> None:
+        """"""Swap the element up""""""
+        temporary = self.__heap[i]
+        while i // 2 > 0:
+            if self.__heap[i] > self.__heap[i // 2]:
+                self.__heap[i] = self.__heap[i // 2]
+                self.__heap[i // 2] = temporary
+            i //= 2
+
+    def insert(self, value: int) -> None:","class BinaryHeap:
+    """"""
+    A max-heap implementation in Python
+    >>> binary_heap = BinaryHeap()
+    >>> binary_heap.insert(6)
+    >>> binary_heap.insert(10)
+    >>> binary_heap.insert(15)
+    >>> binary_heap.insert(12)
+    >>> binary_heap.pop()
+    15
+    >>> binary_heap.pop()
+    12
+    >>> binary_heap.get_list
+    [10, 6]
+    >>> len(binary_heap)
+    2
+    """"""
+
+    def __init__(self) -> None:
+        self.__heap = [0]
+        self.__size = 0
+
+    def __swap_up(self, i: int) -> None:
+        """"""Swap the element up""""""
+        temporary = self.__heap[i]
+        while i // 2 > 0:
+            if self.__heap[i] > self.__heap[i // 2]:
+                self.__heap[i] = self.__heap[i // 2]
+                self.__heap[i // 2] = temporary
+            i //= 2
+
+    def insert(self, value: int) -> None:
+        """"""Insert the element value""""""
+        temp = self.__heap[0]
+        self.__size += temp[0]
+        self.__heap[0] = value
+
+    def __len__(self)"
+8,"def postorder(root: Node | None) -> Generator[int]:
+    """"""
+    Post-order traversal visits left subtree, right subtree, root node.
+    >>> list(postorder(make_tree()))
+    [4, 5, 2, 3, 1]
+    """"""
+    if not root:
+        return
+    yield from postorder(root.left)
+    yield from postorder(root.","def postorder(root: Node | None) -> Generator[int]:
+    """"""
+    Post-order traversal visits left subtree, right subtree, root node.
+    >>> list(postorder(make_tree()))
+    [4, 5, 2, 3, 1]
+    """"""
+    if not root:
+        return
+    yield from postorder(root.left)
+    yield from postorder(root.right)
+
+
+def make_tree():
+    """"""
+    Create a new tree of nodes.
+    >>> make_tree()
+    Traceback (most recent call last):
+        ...
+    InvalidNodeError: this node"
+9,"def height(root: Node | None) -> int:
+    """"""
+    Recursive function for calculating the height of the binary tree.
+    >>> height(None)
+    0
+    >>> height(make_tree())
+    3
+    """"""
+    return (max(height(root.left), height(root.right))","def height(root: Node | None) -> int:
+    """"""
+    Recursive function for calculating the height of the binary tree.
+    >>> height(None)
+    0
+    >>> height(make_tree())
+    3
+    """"""
+    return (max(height(root.left), height(root.right))
+            - max(height(root.right), height(root.left))
+            - max(height(root.right), height(root.left))
+            - max(height(root.right), height(root.right"
+10,"def merge(left_half: list, right_half: list) -> list:
+
+    sorted_array = [None] * (len(right_half) + len(left_half))
+
+    pointer1 = 0  # pointer to current index for left Half
+    pointer2 = 0  # pointer to current index for the right Half
+    index = 0  # pointer to current index for the sorted array Half
+
+    while pointer1 < len(left_half) and pointer2 < len(right_half):
+        if left_half[pointer1] < right_half[pointer2]:
+            sorted_array[index] = left_half[pointer1]
+            pointer1 += 1
+            index += 1
+        else:","def merge(left_half: list, right_half: list) -> list:
+
+    sorted_array = [None] * (len(right_half) + len(left_half))
+
+    pointer1 = 0  # pointer to current index for left Half
+    pointer2 = 0  # pointer to current index for the right Half
+    index = 0  # pointer to current index for the sorted array Half
+
+    while pointer1 < len(left_half) and pointer2 < len(right_half):
+        if left_half[pointer1] < right_half[pointer2]:
+            sorted_array[index] = left_half[pointer1]
+            pointer1 += 1
+            index += 1
+        else:
+            sorted_array[index] = right_half[pointer2]
+            pointer2 += 1
+            index += 1
+
+    sorted_array[index] = left_half[index]
+
+    # In"
+11,"def nor_gate(input_1: int, input_2: int) -> int:
+    """"""","def nor_gate(input_1: int, input_2: int) -> int:
+    """"""Returns the maximum number of points in the input sequence.
+
+    Args:
+      input_1: [N, C] float or int.
+      input_2: [N, C, D] float or int.
+
+"
+12,"def fibonacci(n: int) -> int:
+    """"""","def fibonacci(n: int) -> int:
+    """"""An estimate of the fibonacci numbers from a number of booleans.""""""
+    return n // 2
+
+
+def _print_cart_number():
+    """"""Prints the cart number given in an"
+13,"def fizz_buzz(number: int, iterations: int) -> str:
+    """"""
+    | Plays FizzBuzz.","def fizz_buzz(number: int, iterations: int) -> str:
+    """"""
+    | Plays FizzBuzz.
+    | Parameters:
+        | number: The number of fizz buzzes to make.
+        | iterations: The number of iterations.
+        | type: int.
+    | Parameters:
+        | number:"
+14,"if __name__ == ""__main__"":
+    print(
+        ""Input profits, weights, and then max_weight (all positive ints) separated by ""
+        ""spaces.""
+    )
+
+    profit = [int(x) for x in input(""Input profits separated by spaces: "").split()]
+    weight = [int(x) for","if __name__ == ""__main__"":
+    print(
+        ""Input profits, weights, and then max_weight (all positive ints) separated by ""
+        ""spaces.""
+    )
+
+    profit = [int(x) for x in input(""Input profits separated by spaces: "").split()]
+    weight = [int(x) for x in input(""Input weights separated by spaces: "").split()]
+
+    # for these, we will be to ensure that the profit is the same over all the samples
+    # of various values of the input. "
+15,"def max_profit(prices: list[int]) -> int:
+    """"""
+    >>> max_profit([7, 1, 5, 3, 6, 4])
+    5
+    >>> max_profit([7, 6, 4, 3, 1])
+    0
+    """"""
+    if not prices:
+        return 0
+
+    min_price = prices[0]
+    max_profit: int = 0
+
+    for price in prices:
+        min_price = min(price, min_price)
+        max_profit = max(price - min_price, max_profit)
+
+    return max_profit
+
+
+if __name__ == ""__main__"":","def max_profit(prices: list[int]) -> int:
+    """"""
+    >>> max_profit([7, 1, 5, 3, 6, 4])
+    5
+    >>> max_profit([7, 6, 4, 3, 1])
+    0
+    """"""
+    if not prices:
+        return 0
+
+    min_price = prices[0]
+    max_profit: int = 0
+
+    for price in prices:
+        min_price = min(price, min_price)
+        max_profit = max(price - min_price, max_profit)
+
+    return max_profit
+
+
+if __name__ == ""__main__"":
+    # setup log level
+    min_level = 0
+    max_level = 10
+    level_logger: Optional[logging.Logger] = None
+    logger = logging.getLogger(__name__)
+
+    # check whether"
+16,"class JSONDecodeError(InvalidJSONError, CompatJSONDecodeError):
+    """"""Couldn't decode the text into json""""""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """"""","class JSONDecodeError(InvalidJSONError, CompatJSONDecodeError):
+    """"""Couldn't decode the text into json""""""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """"""
+        :param kwargs:
+          The keyword arguments to the JSONDecodeError class.
+        """"""
+        Error.__init__(self, *args, **kwargs)
+
+
+class JSONDecode(JSONDecodeError):
+    """"""
+"
+17,"def dict_to_sequence(
+    d: _t.SupportsItems[Any, Any] | Iterable[tuple[Any, Any]],
+) -> Iterable[tuple[Any, Any]]:
+    """"""Returns an internal sequence dictionary update.""""""
+
+    if isinstance(d, _SupportsItems):","def dict_to_sequence(
+    d: _t.SupportsItems[Any, Any] | Iterable[tuple[Any, Any]],
+) -> Iterable[tuple[Any, Any]]:
+    """"""Returns an internal sequence dictionary update.""""""
+
+    if isinstance(d, _SupportsItems):
+        return d.add(None, tuple(d))
+
+    elif isinstance(d, dict):
+        return dict_to_sequence(d)
+    elif isinstance(d, list):
+        return [_item("
+18,"def __init__(
+        self,
+        method: str | None = None,
+        url: _t.UriType | None = None,
+        headers: _t.HeadersType = None,
+        files: _t.FilesType = None,
+        data: _t.DataType = None,
+        params: _t.ParamsType = None,
+        auth: _t.AuthType = None,
+        cookies: RequestsCookieJar | CookieJar | dict[str, str] | None = None,
+        hooks: _t.HooksInputType | None = None,
+        json: _t.JsonType = None,
+    ) -> None:
+        # Default empty dicts for dict params.
+        data = [] if data is None else data
+        files = [] if files is None else files
+        headers = {} if headers is None else headers
+        params = {}","def __init__(
+        self,
+        method: str | None = None,
+        url: _t.UriType | None = None,
+        headers: _t.HeadersType = None,
+        files: _t.FilesType = None,
+        data: _t.DataType = None,
+        params: _t.ParamsType = None,
+        auth: _t.AuthType = None,
+        cookies: RequestsCookieJar | CookieJar | dict[str, str] | None = None,
+        hooks: _t.HooksInputType | None = None,
+        json: _t.JsonType = None,
+    ) -> None:
+        # Default empty dicts for dict params.
+        data = [] if data is None else data
+        files = [] if files is None else files
+        headers = {} if headers is None else headers
+        params = {} if params is None else params
+        auth = auth.DefaultAuthAuth(params)
+
+        if method is None:
+            method = method.upper()
+        if method in (""POST"", ""DELETE""):
+            raise InvalidArgument"
+19,"import contextlib
+import os
+
+@contextlib.contextmanager
+def override_environ(**kwargs):
+    save_env = dict(os.environ)
+    for key, value in kwargs.items():
+        if value is None:
+            del os.environ[key]","import contextlib
+import os
+
+@contextlib.contextmanager
+def override_environ(**kwargs):
+    save_env = dict(os.environ)
+    for key, value in kwargs.items():
+        if value is None:
+            del os.environ[key]
+        del os.environ[key]
+    try:
+        yield save_env
+    except AttributeError:
+        pass
+
+
+# Capture a list of the environment and save that environment.
+# If you're build"
+20,"def test_idna_with_version_attribute():
+    """"""Verify we're actually setting idna version when it should be available.""""""
+    with mock.patch(""requests.help.idna"", new=VersionedPackage(""2.6"")):","def test_idna_with_version_attribute():
+    """"""Verify we're actually setting idna version when it should be available.""""""
+    with mock.patch(""requests.help.idna"", new=VersionedPackage(""2.6"")):
+        with mock.patch(""requests.request"", new=Request(status_code=405)),\
+                mock.patch(""requests.get"", new=get_idna_mock_request):
+            with mock.patch"

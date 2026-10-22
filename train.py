@@ -148,12 +148,16 @@ def main(
     }
     buffers = {'train': [], 'val': []}
 
+    allowed_licenses = ["apache-2.0", "mit", "bsd-3-clause"]
+
     def get_batch(split):
 
         buffer = buffers[split]
         while len(buffer) < block_size * batch_size + 1:
             try:
                 row = next(iterators[split])
+                while row['license'] not in allowed_licenses:
+                    row = next(iterators[split])
             except StopIteration: # ran out of data: start another pass with a different shuffle
                 if split == 'train':
                     data_state['epoch'] += 1

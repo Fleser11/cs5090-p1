@@ -1,0 +1,246 @@
+test_num,input_prompt,output
+1,"class LinkedList:
+    def __init__(self,","class LinkedList:
+    def __init__(self, nl=None):
+        # XXX should use a class
+        self.nl = nl
+        if nl is not None: self.nl = nl
+        self.len = nl
+
+    def"
+2,"def __init__(self, a, b, c)
+    self.a = ","def __init__(self, a, b, c)
+    self.a =  a
+    self.b = b
+    self.c = c
+
+
+class SubscriptOf:
+  """"""Abstract base class for generating a Subscript of""""""
+  def __init__(self, s, x,"
+3,"print(f""value of 2 + 3 = {","print(f""value of 2 + 3 = {value}"")
+            assert f""{value} + 3"" in result
+
+            expected = f""{value} + 3""
+            assert result == expected
+
+            expected = f""{value} + 3""
+           "
+4,integers = [(i+1) of i in range(,"integers = [(i+1) of i in range(0, len(self), 2)]
+        self._highest_integer = (i+1) - 1
+        self._max_integer = max(self._integer_numbers(integer_value_list),
+"
+5,"def reverseList(list):
+    """"""","def reverseList(list):
+    """""" Return the reverse list of the items in the list. """"""
+    return list
+
+
+def getDotDict(d):
+    """""" Return the dictionary of DOT objects. """"""
+    return copy.copy(d)
+
+"
+6,if __name__ == ,"if __name__ ==  '__main__':
+    main()
+<stop>"
+7,while (True):,"while (True):
+        return None
+    else:
+        return 'No such file or directory %s' % path
+
+def _get_file_path(path, format=None):
+    """"""
+    Retrieves the file path"
+8,"class BinaryTree:
+    """"""
+    ","class BinaryTree:
+    """"""
+     Tree enemies to detect the subtree structure.
+     A subtree can also be fetched.
+
+    >>> a = BinaryTree(tree.copy())
+    >>> a.in_order(Bin"
+9,"def print_num(number):
+    """"""
+    Args:
+        value: the value printed
+    """"""
+    print(","def print_num(number):
+    """"""
+    Args:
+        value: the value printed
+    """"""
+    print(number)
+
+
+def find_number(number):
+    """"""
+    Args:
+        number: the number string
+    """"""
+    return number.split('.')
+
+
+def get_number(number):
+    """"""
+"
+10,"def addNums(a, b):
+    """"""
+    returns the value of a + b
+    """"""","def addNums(a, b):
+    """"""
+    returns the value of a + b
+    """"""
+    return a + b
+
+
+def addNum(a, b):
+    """"""
+    returns the value of a + b
+    """"""
+    return a + b
+
+def p_num(a):
+    """""""
+11,"def addNums(b, a):
+    """"""
+    returns the value of b + a
+    """"""","def addNums(b, a):
+    """"""
+    returns the value of b + a
+    """"""
+    b = b + a
+    return b + a
+
+
+def updateNums(b, a):
+    """"""
+    returns the value of b + a
+    """"""
+    b = b - a
+    a"
+12,"class person:
+    def __init(self, ","class person:
+    def __init(self, journal):
+        self.journal = journal
+    def get_id(self):
+        return self.journal.id
+    def get_first_name(self):
+        return self"
+13,"def highEnough(val):
+    if val > self.min:
+        ","def highEnough(val):
+    if val > self.min:
+         raise Exception(""too low value to find %d."" % self.num)
+
+      # In case this is true, the value must be at least self.min
+      if self.min < 0:
+         # Else"
+14,"def getMax(a, b):
+    """"""
+    returns the greater value between a and b:
+    return a if a > b else b
+    """"""
+    return a","def getMax(a, b):
+    """"""
+    returns the greater value between a and b:
+    return a if a > b else b
+    """"""
+    return a - b
+
+def toFloat(d):
+    """"""
+    convert a float to a string.
+    """"""
+    return toFloat(d)
+
+def toInt(d):
+    """"""
+    convert a int to"
+15,"class listManager:
+    def __init__(self):
+        self.list = []
+    
+    def getMinimum(self):
+        return ","class listManager:
+    def __init__(self):
+        self.list = []
+    
+    def getMinimum(self):
+        return 9999
+    
+    def getMaximum(self):
+        return 9999
+        
+    def getAvailable(self):
+        return [1,2,3]
+    
+    def getMaximumAvailable(self):
+       "
+16,"import os
+""creating directory /home/testing.txt""
+os.makedirs(","import os
+""creating directory /home/testing.txt""
+os.makedirs(os.path.dirname(os.getcwd()))
+os.chdir(os.path.dirname(os.getcwd()))
+
+# create user
+user = User.objects.create(
+   username=os.getuid(),"
+17,"""""""
+Testing file for the LinkedList class, includes test for:
+1. attempting to remove from empty list,
+2. inserting an item
+""""""","""""""
+Testing file for the LinkedList class, includes test for:
+1. attempting to remove from empty list,
+2. inserting an item
+""""""
+
+import sys
+import os
+import time
+
+from pylib.base import basetest, main
+
+
+def _make_linkedlist(name, *items):
+  """"""
+  Create a linked list
+ "
+18,"class Class:
+    def __init__(self):
+        self.a = 2
+    
+    #initializer:
+    def ","class Class:
+    def __init__(self):
+        self.a = 2
+    
+    #initializer:
+    def erase(self, i):
+        self.a = i
+        return self
+
+    #    the number of arguments
+    def erase_i(self):
+        return self.a
+    
+class Function:"
+19,"print(""Hello ","print(""Hello é. Goodbye!"")
+
+            else:
+                self.fail(""Goodbye is not in the balance of the cheating equipment"")
+
+        if sn."
+20,"while True:
+    print(""input -1 to stop"")
+    x = input(""what is your input"")","while True:
+    print(""input -1 to stop"")
+    x = input(""what is your input"")
+    x = (x + 1) % 3
+    print(""input -1 to stop"")
+    x = input( ""what is your input"" )
+    x = (x + 1) % 3
+    print("""
