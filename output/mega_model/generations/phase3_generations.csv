@@ -1,4 +1,4 @@
-test_num,input_prompt,output
+test_num,input_prompt,output,issue,explanation
 1,"class LinkedList:
     def __init__(self,","class LinkedList:
     def __init__(self, nl=None):
@@ -7,7 +7,7 @@ test_num,input_prompt,output
         if nl is not None: self.nl = nl
         self.len = nl
 
-    def"
+    def",wrong-logic,medium,"The model creates teh class, but creates an variable without explanation and does operations on it."
 2,"def __init__(self, a, b, c)
     self.a = ","def __init__(self, a, b, c)
     self.a =  a
@@ -17,7 +17,7 @@ test_num,input_prompt,output
 
 class SubscriptOf:
   """"""Abstract base class for generating a Subscript of""""""
-  def __init__(self, s, x,"
+  def __init__(self, s, x,",correct
 3,"print(f""value of 2 + 3 = {","print(f""value of 2 + 3 = {value}"")
             assert f""{value} + 3"" in result
 
@@ -25,11 +25,11 @@ class SubscriptOf:
             assert result == expected
 
             expected = f""{value} + 3""
-           "
+           ",wrong-logic,"seems to be using assert for some nonsensicle reason, also has tabs where it probably shouldn't be"
 4,integers = [(i+1) of i in range(,"integers = [(i+1) of i in range(0, len(self), 2)]
         self._highest_integer = (i+1) - 1
         self._max_integer = max(self._integer_numbers(integer_value_list),
-"
+",wrong-logic,"references i out of context and for some reason skips by 2?"
 5,"def reverseList(list):
     """"""","def reverseList(list):
     """""" Return the reverse list of the items in the list. """"""
@@ -40,10 +40,10 @@ def getDotDict(d):
     """""" Return the dictionary of DOT objects. """"""
     return copy.copy(d)
 
-"
+",wrong-logic,"returns the list without reversing, though it does create an accurate docstring"
 6,if __name__ == ,"if __name__ ==  '__main__':
     main()
-<stop>"
+<stop>", correct
 7,while (True):,"while (True):
         return None
     else:
@@ -51,7 +51,7 @@ def getDotDict(d):
 
 def _get_file_path(path, format=None):
     """"""
-    Retrieves the file path"
+    Retrieves the file path",wrong-logic,"immediately returns none then adds more logic after that"
 8,"class BinaryTree:
     """"""
     ","class BinaryTree:
@@ -60,7 +60,7 @@ def _get_file_path(path, format=None):
      A subtree can also be fetched.
 
     >>> a = BinaryTree(tree.copy())
-    >>> a.in_order(Bin"
+    >>> a.in_order(Bin",wrong-logic,"writes a nonsensicle docstring"
 9,"def print_num(number):
     """"""
     Args:
@@ -84,7 +84,7 @@ def find_number(number):
 
 def get_number(number):
     """"""
-"
+",correct
 10,"def addNums(a, b):
     """"""
     returns the value of a + b
@@ -102,7 +102,7 @@ def addNum(a, b):
     return a + b
 
 def p_num(a):
-    """""""
+    """"""",correct
 11,"def addNums(b, a):
     """"""
     returns the value of b + a
@@ -119,7 +119,7 @@ def updateNums(b, a):
     returns the value of b + a
     """"""
     b = b - a
-    a"
+    a",prompt-sensitive,"returns b after also adding a, returning 2b+a after the above gets it correct"
 12,"class person:
     def __init(self, ","class person:
     def __init(self, journal):
@@ -127,7 +127,7 @@ def updateNums(b, a):
     def get_id(self):
         return self.journal.id
     def get_first_name(self):
-        return self"
+        return self",correct
 13,"def highEnough(val):
     if val > self.min:
         ","def highEnough(val):
@@ -136,7 +136,7 @@ def updateNums(b, a):
 
       # In case this is true, the value must be at least self.min
       if self.min < 0:
-         # Else"
+         # Else",wrong-logic,"raises the excpetion, which doesn't really make sense"
 14,"def getMax(a, b):
     """"""
     returns the greater value between a and b:
@@ -157,7 +157,7 @@ def toFloat(d):
 
 def toInt(d):
     """"""
-    convert a int to"
+    convert a int to",context-ignored,"subtracts b from a rather than doing the comparison"
 15,"class listManager:
     def __init__(self):
         self.list = []
@@ -177,7 +177,7 @@ def toInt(d):
         return [1,2,3]
     
     def getMaximumAvailable(self):
-       "
+       ",wrong-logic,"returns 9999 rather than any kind of minimum"
 16,"import os
 ""creating directory /home/testing.txt""
 os.makedirs(","import os
@@ -187,7 +187,7 @@ os.chdir(os.path.dirname(os.getcwd()))
 
 # create user
 user = User.objects.create(
-   username=os.getuid(),"
+   username=os.getuid(),",wrong-logic,"ignores the context right before the call"
 17,"""""""
 Testing file for the LinkedList class, includes test for:
 1. attempting to remove from empty list,
@@ -208,7 +208,7 @@ from pylib.base import basetest, main
 def _make_linkedlist(name, *items):
   """"""
   Create a linked list
- "
+ ",wrong-logic,"calls classes that don't exist"
 18,"class Class:
     def __init__(self):
         self.a = 2
@@ -227,13 +227,13 @@ def _make_linkedlist(name, *items):
     def erase_i(self):
         return self.a
     
-class Function:"
+class Function:",correct
 19,"print(""Hello ","print(""Hello é. Goodbye!"")
 
             else:
                 self.fail(""Goodbye is not in the balance of the cheating equipment"")
 
-        if sn."
+        if sn.",syntax,"does an else statement without a preceeding if"
 20,"while True:
     print(""input -1 to stop"")
     x = input(""what is your input"")","while True:
@@ -243,4 +243,4 @@ class Function:"
     print(""input -1 to stop"")
     x = input( ""what is your input"" )
     x = (x + 1) % 3
-    print("""
+    print(""",wrong-logic,"repeatedly asks for -1 to stop, but doesn't do anything with it"
