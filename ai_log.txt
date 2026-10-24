@@ -3,9 +3,14 @@ AI-Use Log — CS5090 Project 1
 Tool: Claude Code. Entries below list only the changes the AI made to project files.
 File names are as they were at the time (e.g. tokenizing.py is now tokenizer.py).
 
-- 2026-09-17/18: AI found tokenizing.py wrote int64 while train.py read uint16 (~75% of tokens were padding zeros) and fixed it to cast to uint16.
-- 2026-09-18: AI fixed garbled sampling output (Ġ/Ċ) by adding `decoders.ByteLevel()` to the tokenizer in tokenizing.py and regenerating bins.
-- 2026-09-22: AI fixed data.py saving files as `b'...'` literals by switching from `str(bytes)` to `.text`.
-- 2026-09-24/25: AI fixed the `asdict()` TypeError in train.py and rewrote base_config.py and ablation_config.py with type annotations and literal `min_lr`/`lr_decay_iters`. ablation_config.py was rewritten as a copy of base_config, so I need to check its values are what I intended.
-- 2026-09-25: AI fixed `ModuleNotFoundError` for `--config configs/base_config` by converting the path to a module name in train.py.
-- 2026-10-23: AI rewrote this log (shortened entries, removed non-code-change entries, added this one) before I reviewed it. I still need to read it and correct anything that doesn't match what I did.
+- 2026-09-17/18: Found that tokenizing.py wrote int64 while train.py read uint16 (~75% of tokens were padding zeros) and fixed it to cast to uint16.
+- 2026-09-18: Fixed garbled sampling output (byte-level marker characters) by adding decoders.ByteLevel() to the tokenizer in tokenizing.py and regenerating the bins.
+- 2026-09-22: Fixed data.py saving files as b'...' literals by switching from str(bytes) to .text.
+- 2026-09-24/25: Fixed the asdict() TypeError in train.py and rewrote base_config.py and ablation_config.py with type annotations and literal min_lr/lr_decay_iters. ablation_config.py was rewritten as a copy of base_config.py; its values need to be checked against what I intended.
+- 2026-09-25: Fixed ModuleNotFoundError for --config configs/base_config by converting the path to a module name in train.py.
+- 2026-10-10: Wrote a bare-bones sft.py and sft_config.py for supervised fine-tuning on code only (no instruction text).
+- 2026-10-10: Added optional RoPE position encodings to model.py, kept minimally different from the original.
+- 2026-10-10: Wrote sft_codeparrot.py, a copy of the SFT script that fine-tunes on the pretraining data. These SFT files were later removed from the repo as they did not provide the performance increase needed to show improvement.
+- 2026-10-10: Wrote train_kaggle.py and kaggle_config.py (later removed), and edited train.py and mega_config.py for the larger model (12 layers, 12 heads, 768 dim) with multi-epoch and TPU/Kaggle support.
+- 2026-10-23: Wrote readme.md (run order and commands for each script) from reading the scripts and configs.
+- 2026-10-23: Utilized AI to rewrite this log before refining and reviewing it.
